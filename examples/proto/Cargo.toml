@@ -1,0 +1,23 @@
+[package]
+name = "rums-proto-example"
+version = "0.1.0"
+edition = "2024"
+
+[[bin]]
+name = "server"
+path = "src/server.rs"
+
+[[bin]]
+name = "client"
+path = "src/client.rs"
+
+[dependencies]
+rums = {path = "../.."}
+tokio = { version = "1", features = ["full"] }
+futures = "0.3.31"
+bytes = "*"
+prost = "0.14.1"
+
+[build-dependencies]
+rums = {path = "../.."}
+prost-build = "0.14.1"

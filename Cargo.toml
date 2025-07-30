@@ -1,0 +1,13 @@
+[package]
+name = "rums"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+tokio = { version = "1", features = ["full"] }
+futures = "0.3.31"
+bytes = "*"
+defer = "0.2.1"
+
+prost = "0.14.1"
+prost-build = "0.14.1"
