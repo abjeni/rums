@@ -1,14 +1,18 @@
 
 
 pub mod server {
-    use tokio::net::TcpListener;
-    use tokio::io::{AsyncReadExt, AsyncWriteExt};
-    use tokio::runtime::Builder;
+    use std::net::TcpListener;
+    
+    use std::io::Read;
 
     use std::error::Error;
 
     use std::sync::Arc;
-    use tokio::sync::Mutex;
+    use std::sync::Mutex;
+
+    use std::thread::spawn;
+
+    use std::io::Write;
 
     pub struct Server<Handler>
     where 
@@ -27,26 +31,25 @@ pub mod server {
             }
         }
 
-        pub async fn serve(self, listener: TcpListener) -> Box<dyn Error> {
-            
-            let runtime = Builder::new_multi_thread().build().unwrap();
+        pub fn serve(self, listener: TcpListener) -> Box<dyn Error> {
 
             loop {
-                let (mut socket, _) = match listener.accept().await {
+                let (mut socket, _) = match listener.accept() {
                     Ok(s) => s,
                     Err(e) => {
-                        runtime.shutdown_background();
                         return Box::new(e);
                     }
                 };
 
                 let handler = self.handler.clone();
-                runtime.spawn(async move {
+                spawn(move || {
                     let mut buf = vec![];
                     
                     loop {
-                        let n = match socket.read_buf(&mut buf).await {
-                            Ok(0) => return,
+                        let n = match socket.read_to_end(&mut buf) {
+                            Ok(0) => {
+                                return;
+                            }
                             Ok(n) => n,
                             Err(e) => {
                                 eprintln!("failed to read from socket; err = {:?}", e);
@@ -54,7 +57,7 @@ pub mod server {
                             }
                         };
 
-                        let handler = handler.lock().await;
+                        let mut handler = handler.lock().expect("unable to lock mutex");
 
                         let resp = handler.handle(&buf[0..n]);
                         let resp = match resp {
@@ -64,9 +67,9 @@ pub mod server {
                                 return;
                             }
                         };
-
+                        
                         // Write the data back
-                        if let Err(e) = socket.write_all(&resp).await {
+                        if let Err(e) = socket.write_all(&resp) {
                             eprintln!("failed to write to socket; err = {:?}", e);
                             return;
                         }
@@ -77,14 +80,6 @@ pub mod server {
     }
 
     pub trait ServerHandler {
-        fn handle(&'_ self, request: &[u8]) -> Result<Vec<u8>, Box<dyn Error + Send>>;
-    }
-
-    impl<'a> ServerHandler for fn(request: &[u8]) -> Vec<u8> {
-        fn handle(&'_ self, request: &[u8]) -> Result<Vec<u8>, Box<dyn Error + Send>> {
-            let response = (self)(request);
-
-            Ok(response)
-        }
+        fn handle(&mut self, request: &[u8]) -> Result<Vec<u8>, Box<dyn Error + Send>>;
     }
 }

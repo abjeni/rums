@@ -46,7 +46,7 @@ pub mod hello {
                 add_route(add_route(buf, "HelloWorld"), "Hello"),
                 "hello",
             );
-            let responses = self.send(buf);
+            let responses = self.send(buf.into_boxed_slice());
             responses
                 .map(|res| {
                     Response {
@@ -72,7 +72,7 @@ pub mod hello {
                 add_route(add_route(buf, "GoodbyeWorld"), "Hello"),
                 "hello",
             );
-            let responses = self.send(buf);
+            let responses = self.send(buf.into_boxed_slice());
             responses
                 .map(|res| {
                     Response {

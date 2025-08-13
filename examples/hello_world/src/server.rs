@@ -1,41 +1,45 @@
-use tokio::net::TcpListener;
 
-use futures::{
-    stream::FuturesUnordered,
-    StreamExt,
-};
+
+use std::net::TcpListener;
 
 use std::error::Error;
 
+use std::thread::scope;
+
 use rums::Server;
+use rums::ServerHandler;
 use rums::RouteHandler;
 
-fn my_handler(request: &[u8]) -> Vec<u8> {
-    println!("got request: {}", String::from_utf8_lossy(request));
-    Vec::from("hi to client")
+struct MyServer {
+    id: i32
+}
+
+impl ServerHandler for MyServer {
+    fn handle(&mut self, request: &[u8]) -> Result<Vec<u8>, Box<dyn Error + Send>> {
+        println!("server {}: got request: {}", self.id, String::from_utf8_lossy(request));
+
+        Ok(Vec::from(format!("hi from server {}", self.id)))
+    }
 }
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
+    scope(|s| {
+        for i in 0..100 {
+            s.spawn(move || {
+                let addr = format!("[::1]:{}", i+50051);
+                let listener = TcpListener::bind(addr).unwrap();
 
-    let mut queue = FuturesUnordered::new();
+                let server = MyServer{id: i};
 
-    for i in 0..10 {
-        let addr = format!("[::1]:{}", i+50051);
-        let listener = TcpListener::bind(addr).await?;
+                let mut handler = Box::new(RouteHandler::new());
+                handler.sub_route("hello".into()).add_route("world".into(), Box::new(server));
 
-        let mut handler = Box::new(RouteHandler::new());
-        handler.sub_route("hello".into()).add_route("world".into(), Box::new(my_handler as for<'a> fn(&'a [u8]) -> Vec<u8>));
-
-        let server = Server::new(handler);
-        let srv = server.serve(listener);
-
-        queue.push(srv);
-    }
-
-    while let Some(err) = queue.next().await {
-        eprintln!("server error {:?}", err)
-    }
+                let server = Server::new(handler);
+                server.serve(listener);
+            });
+        }
+    });
 
     Ok(())
 }

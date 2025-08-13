@@ -16,3 +16,6 @@ pub use crate::route::route::get_route;
 
 pub mod proto;
 pub use crate::proto::proto::Generator;
+
+pub mod response;
+pub use crate::response::response::Response;

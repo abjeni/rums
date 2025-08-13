@@ -1,4 +1,5 @@
 /target
 /examples/hello_world/target
 /examples/proto/target
+/examples/timing/target
 Cargo.lock

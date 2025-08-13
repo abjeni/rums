@@ -51,36 +51,44 @@ pub mod proto {
                 buf.push_str("\tuse rums::get_route;\n");
                 buf.push_str("\tuse rums::add_route;\n");
                 buf.push_str("\tuse rums::RouteHandler;\n");
+                buf.push_str("\tuse rums::Response;\n");
+                buf.push_str("\n");
+                buf.push_str("\tuse std::marker::Copy;\n");
                 buf.push_str("\n");
 
-                buf.push_str(format!("\tpub trait {}Client {{\n", service.name).as_str());
+                buf.push_str(format!("\tpub trait {}Client<NIDT> {{\n", service.name).as_str());
                 {
 
                     for method in service.methods.iter() {
-                        buf.push_str(format!("\t\tfn {}(&self, msg: &super::{}) -> impl Stream<Item = Result<super::{}, Box<dyn Error>>>;\n", method.name, method.input_type, method.output_type).as_str());
+                        buf.push_str(format!("\t\tfn {}<'a>(&'a self, msg: &super::{}) -> impl Stream<Item = Response<'a, super::{}, NIDT>> where NIDT: 'a;\n", method.name, method.input_type, method.output_type).as_str());
                     }
 
                 }
                 buf.push_str("\t}\n");
                 buf.push_str("\n");
 
-                buf.push_str(format!("\timpl {}Client for Configuration {{\n", service.name).as_str());
+                buf.push_str(format!("\timpl<NIDT: Copy> {}Client<NIDT> for Configuration<NIDT> {{\n", service.name).as_str());
                 {
 
                     for method in service.methods.iter() {
                         buf.push_str("\n");
                         buf.push_str(format!("\t\t// method: {}\n", method.proto_name).as_str());
-                        buf.push_str(format!("\t\tfn {}(&self, msg: &super::{}) -> impl Stream<Item = Result<super::{}, Box<dyn Error>>> {{\n", method.name, method.input_type, method.output_type).as_str());
+                        buf.push_str(format!("\t\tfn {}<'a>(&'a self, msg: &super::{}) -> impl Stream<Item = Response<'a, super::{}, NIDT>> where NIDT: 'a {{\n", method.name, method.input_type, method.output_type).as_str());
                         {
-                            buf.push_str(format!("\t\t\tprintln!(\"hello, {}\");\n", method.name).as_str());
-                            buf.push_str("\n");
                             buf.push_str("\t\t\tlet mut buf = vec![];\n");
                             buf.push_str("\t\t\tmsg.encode(&mut buf).unwrap();\n");
-                            buf.push_str(format!("\t\t\tlet buf = Box::new(add_route(add_route(add_route(buf, \"{}\"), \"{}\"), \"{}\"));\n", method.proto_name, service.proto_name, service.package).as_str());
+                            buf.push_str(format!("\t\t\tlet buf = add_route(add_route(add_route(buf, \"{}\"), \"{}\"), \"{}\");\n", method.proto_name, service.proto_name, service.package).as_str());
                             buf.push_str("\n");
-                            buf.push_str("\t\t\tlet responses = self.send(&buf);\n");
+                            buf.push_str("\t\t\tlet responses = self.send(buf);\n");
                             buf.push_str("\n");
-                            buf.push_str(format!("\t\t\tresponses.map(|res| {{res.map(|buf| {{super::{}::decode(&buf as &[u8]).unwrap()}})}})\n", method.output_type).as_str());
+                            buf.push_str("\t\t\tresponses.map(|res| {\n");
+                            buf.push_str("\t\t\t\tResponse {\n");
+                            buf.push_str("\t\t\t\t\tnode: res.node,\n");
+                            buf.push_str("\t\t\t\t\tresponse: res.response.map(|buf| {\n");
+                            buf.push_str(format!("\t\t\t\t\t\tsuper::{}::decode(&buf as &[u8]).unwrap()\n", method.output_type).as_str());
+                            buf.push_str("\t\t\t\t\t})\n");
+                            buf.push_str("\t\t\t\t}\n");
+                            buf.push_str("\t\t})\n");
                         }
                         buf.push_str("\t\t}\n");
                     }
@@ -98,7 +106,7 @@ pub mod proto {
                 {
 
                     for method in service.methods.iter() {
-                        buf.push_str(format!("\t\tfn {}(&self, msg: super::{}) -> Result<super::{}, Box<dyn Error + Send>>;\n", method.name, method.input_type, method.output_type).as_str());
+                        buf.push_str(format!("\t\tfn {}(&mut self, msg: super::{}) -> Result<super::{}, Box<dyn Error + Send>>;\n", method.name, method.input_type, method.output_type).as_str());
                     }
 
                 }
@@ -129,11 +137,9 @@ pub mod proto {
 
                 buf.push_str(format!("\timpl ServerHandler for {}Handler {{\n", service.name).as_str());
                 {
-                    buf.push_str("\t\tfn handle(&'_ self, request: &[u8]) -> Result<Vec<u8>, Box<dyn Error + Send>> {\n");
+                    buf.push_str("\t\tfn handle(&'_ mut self, request: &[u8]) -> Result<Vec<u8>, Box<dyn Error + Send>> {\n");
                     {
                         buf.push_str("\t\t\tlet (request, route) = get_route(request);\n");
-                        buf.push_str("\n");
-                        buf.push_str("\t\t\tprintln!(\"message routed to: {}\", route);\n");
                         buf.push_str("\n");
                         buf.push_str("\t\t\tmatch route {\n");
                         for method in service.methods.iter() {

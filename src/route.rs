@@ -48,10 +48,6 @@ pub mod route {
             }
         }
 
-        pub fn dyn_convert_thing(hi: Option<&mut Box<dyn ServerHandler + Send>>) -> Option<&mut Box<dyn ServerHandler + Send>> {
-            hi
-        }
-
         pub fn add_route(&mut self, route: &str, handler: Box<dyn ServerHandler + Send>) -> &mut Box<dyn ServerHandler + Send> {
             self.handlers.entry(String::from(route)).or_insert(handler)
         }
@@ -65,17 +61,17 @@ pub mod route {
         }
     }
 
-    impl<'a> ServerHandler for RouteHandler {
-        fn handle(&'_ self, request: &[u8]) -> Result<Vec<u8>, Box<dyn Error + Send>> {
+    impl ServerHandler for RouteHandler {
+        fn handle(&mut self, request: &[u8]) -> Result<Vec<u8>, Box<dyn Error + Send>> {
 
             let (request, route) = get_route(request);
 
             if self.handlers.contains_key(route) {
-                return self.handlers[route].handle(request);
+                return self.handlers.get_mut(route).unwrap().handle(request);
             }
 
             match self.subhandlers.contains_key(route) {
-                true => self.subhandlers[route].handle(request),
+                true => self.subhandlers.get_mut(route).unwrap().handle(request),
                 false => Err(Box::<dyn Error + Send + Sync>::from(format!("unhandled route: {}", route)))
             }
         }

@@ -22,7 +22,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let mut addrs = vec![];
 
-    for i in 0..20 {
+    for i in 0..100 {
         let addr = (String::from(format!("[::1]:{}", 50051+i)), i);
         addrs.push(addr);
     }
