@@ -1,6 +1,6 @@
-Do not use!
-
 # *Rums*
+
+(Very unstable lib!)
 
 Trying to bring the same features of [Gorums](https://github.com/relab/gorums) to rust.
 The library currently only supports sending tcp requests to multiple servers, receiving responses in the order they are received through an async stream.
