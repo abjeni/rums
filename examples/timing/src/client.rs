@@ -2,10 +2,9 @@
 use std::string::String;
 
 use rums::Configuration;
-
-use futures::stream::StreamExt;
-
-use futures::select;
+use rums::Responses;
+use rums::Selection;
+use rums::SendOptions;
 
 pub mod proto {
     pub mod hello {
@@ -32,35 +31,33 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut msg = HelloMessage::default();
     msg.message = "Client says Hello".into();
 
-    let hellos = cfg.hello_world(&msg);
-    let mut hellos = hellos.fuse();
+    let mut hellos = cfg.hello_world(&msg, SendOptions::default())?;
 
     let mut msg = HelloMessage::default();
     msg.message = "Client says Goodbye".into();
 
-    let goodbyes = cfg.goodbye_world(&msg);
-    let mut goodbyes = goodbyes.fuse();
+    let mut goodbyes = cfg.goodbye_world(&msg, SendOptions::default())?;
+
+    let mut selection = Selection::new(&mut [&mut hellos, &mut goodbyes]).unwrap();
 
     loop {
-        select!(
-            hello = hellos.next() => {
-                if let Some(hello) = hello {
-                    match hello.response {
-                        Ok(msg) => println!("got HelloWorld response from node {}: {}", hello.node.id, msg.message),
-                        Err(e) => println!("HelloWorld response error from node {}: err = {:?}", hello.node.id, e)
-                    }
-                }
-            },
-            goodbye = goodbyes.next() => {
-                if let Some(goodbye) = goodbye {
-                    match goodbye.response {
-                        Ok(msg) => println!("got GoodbyeWorld response from node {}: {}", goodbye.node.id, msg.message),
-                        Err(e) => println!("GoodbyeWorld response error from node {}: err = {:?}", goodbye.node.id, e)
-                    }
-                }
-            },
-            complete => break
-        )
+        if let Err(_) = selection.wait(&mut [&mut hellos, &mut goodbyes]) {
+            break
+        }
+
+        while let Some(hello) = hellos.get_nonblock() {
+            match hello.response {
+                Ok(msg) => println!("got HelloWorld response from node {}: {}", hello.node.unwrap().id, msg.message),
+                Err(e) => println!("HelloWorld response error from node {}: err = {:?}", hello.node.unwrap().id, e)
+            }
+        }
+
+        while let Some(goodbye) = goodbyes.get_nonblock() {
+            match goodbye.response {
+                Ok(msg) => println!("got GoodbyeWorld response from node {}: {}", goodbye.node.unwrap().id, msg.message),
+                Err(e) => println!("GoodbyeWorld response error from node {}: err = {:?}", goodbye.node.unwrap().id, e)
+            }
+        }
     }
 
     Ok(())

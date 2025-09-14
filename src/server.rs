@@ -2,6 +2,7 @@
 
 pub mod server {
     use std::net::TcpListener;
+    use std::net::Shutdown;
     
     use std::io::Read;
 
@@ -71,6 +72,9 @@ pub mod server {
                         // Write the data back
                         if let Err(e) = socket.write_all(&resp) {
                             eprintln!("failed to write to socket; err = {:?}", e);
+                            return;
+                        }
+                        if let Err(_) = socket.shutdown(Shutdown::Write) {
                             return;
                         }
                     }

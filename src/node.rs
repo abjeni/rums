@@ -1,19 +1,97 @@
 
-
 pub mod node {
 
     use std::string::String;
-
-    use tokio::net::TcpStream;
-
-    use tokio::io::AsyncWriteExt;
-    use tokio::io::AsyncReadExt;
-    
-    use crate::Response;
-    
+    use mio::net::TcpStream;
+    use std::net::Shutdown;
+    use std::io;
     use std::error::Error;
+    use std::mem;
+    use std::io::{Read, Write};
 
-    use std::sync::Arc;
+    use crate::Response;
+
+
+    pub(crate) struct Connection {
+        pub(crate) response: io::Result<Vec<u8>>,
+        pub(crate) socket: Box<TcpStream>,
+        bytes_written: usize,
+        bytes_read: usize,
+        buf: Vec<u8>,
+        data: Box<[u8]>
+    }
+
+    impl Connection {
+        pub(crate) fn new(socket: TcpStream, data: Box<[u8]>) -> Self {
+            Connection {
+                response: Err(io::Error::new(io::ErrorKind::InProgress, Box::<dyn Error + Send + Sync>::from("response is pending"))),
+                bytes_written: 0,
+                bytes_read: 0,
+                buf: vec![0; 4096],
+                socket: Box::new(socket),
+                data: data
+            }
+        }
+
+        // data should be part of Connection, it needs to be the same for every call
+        // returns true if it is successful, and false when unsuccessful
+        pub(crate) fn write(&mut self) -> Option<bool> {
+            loop {
+                if self.data.len() == self.bytes_written {
+                    if let Err(e) = self.socket.shutdown(Shutdown::Write) {
+                        panic!("reregister error: {:?}", e);
+                    };
+                    return Some(true);
+                }
+
+                let n = match self.socket.write(&self.data[self.bytes_written..]) {
+                    Ok(n) => n,
+                    Err(e) if e.kind() == io::ErrorKind::NotConnected => return None,
+                    Err(e) if e.kind() == io::ErrorKind::WouldBlock => return None,
+                    Err(e) => {
+                        self.response = Err(e);
+                        return Some(false);
+                    }
+                };
+                self.bytes_written += n;
+            }
+        }
+
+        // non-blocking function: returns true when complete
+        pub(crate) fn read(&mut self) -> bool {
+
+            loop {
+                match self.socket.read(&mut self.buf[self.bytes_read..]) {
+                    Ok(0) => {
+                        break;
+                    }
+                    Ok(n) => {
+                        self.bytes_read += n;
+                        if self.bytes_read == self.buf.len() {
+                            self.buf.resize(self.buf.len() + 4096, 0);
+                        }
+                    }
+                    Err(e) if e.kind() == io::ErrorKind::Interrupted => continue,
+                    Err(e) if e.kind() == io::ErrorKind::NotConnected => return false,
+                    Err(e) if e.kind() == io::ErrorKind::WouldBlock => return false,
+                    Err(e) => {
+                        self.response = Err(e);
+                        return true;
+                    }
+                }
+            }
+            self.buf.truncate(self.bytes_read);
+            self.response = Ok(mem::replace(&mut self.buf, vec![]));
+            return true;
+        }
+
+        pub(crate) fn response<'a, NIDT>(&mut self, node: &'a Node<NIDT>) -> Response<'a, Vec<u8>, NIDT> {
+            Response{
+                response: mem::replace(&mut self.response, Err(io::Error::new(io::ErrorKind::InProgress, Box::<dyn Error + Send + Sync>::from("response is pending")))),
+                node: Some(node)
+            }
+        }
+    }
 
     pub struct Node<NIDT> {
         pub addr: String,
@@ -28,48 +106,11 @@ pub mod node {
             }
         }
 
-        pub async fn send(&self, data: Arc<[u8]>) -> Response<Vec<u8>, NIDT> {
-            let mut stream = match TcpStream::connect(self.addr.clone()).await {
-                Ok(stream) => stream,
-                Err(e) => {
-                    eprintln!("failed connect to socket; err = {:?}", e);
-                    return Response {
-                        response: Err(Box::new(e)),
-                        node: self
-                    }
-                }
-            };
+        pub(crate) fn start_connection<'a>(&'a self, data: Box<[u8]>) -> io::Result<Connection> {
+            let socket = TcpStream::connect(self.addr.parse().expect("addr invalid"))?;
 
-            if let Err(e) = stream.write_all(&data).await {
-                eprintln!("failed to write to socket; err = {:?}", e);
-                return Response {
-                    response: Err(Box::new(e)),
-                    node: self
-                }
-            }
-
-            if let Err(_) = stream.shutdown().await {
-                return Response {
-                    response: Err(Box::<dyn Error>::from("shutdown error")),
-                    node: self
-                }
-            }
-
-            let mut buf = vec![];
-            
-            // consider returning an error on a 0 byte response
-            if let Err(e) = stream.read_buf(&mut buf).await {
-                eprintln!("failed to read from socket; err = {:?}", e);
-                return Response {
-                    response: Err(Box::new(e)),
-                    node: self
-                }
-            }
-
-            Response {
-                response: Ok(buf),
-                node: self
-            }
+            let conn = Connection::new(socket, data);
+            Ok(conn)
         }
     }
 }

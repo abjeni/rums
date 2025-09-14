@@ -1,6 +1,10 @@
 
+#![feature(io_error_inprogress)]
+
 pub mod configuration;
 pub use crate::configuration::configuration::Configuration;
+pub use crate::configuration::configuration::Connections;
+pub use crate::configuration::configuration::SendOptions;
 
 pub mod node;
 pub use crate::node::node::Node;
@@ -19,3 +23,7 @@ pub use crate::proto::proto::Generator;
 
 pub mod response;
 pub use crate::response::response::Response;
+pub use crate::response::response::Responses;
+pub use crate::response::response::ResponsesMap;
+pub use crate::response::response::ResponsesBlocking;
+pub use crate::response::response::Selection;

@@ -25,7 +25,7 @@ impl ServerHandler for MyServer {
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
     scope(|s| {
-        for i in 0..100 {
+        for i in 0..10 {
             s.spawn(move || {
                 let addr = format!("[::1]:{}", i+50051);
                 let listener = TcpListener::bind(addr).unwrap();

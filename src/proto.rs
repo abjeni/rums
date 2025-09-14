@@ -35,60 +35,44 @@ pub mod proto {
 
                 // Client
 
-                buf.push_str("\n");
                 buf.push_str("\tuse rums::Configuration;\n");
-                buf.push_str("\n");
-                buf.push_str("\tuse futures::stream::Stream;\n");
-                buf.push_str("\n");
                 buf.push_str("\tuse std::error::Error;\n");
-                buf.push_str("\n");
-                buf.push_str("\tuse futures::stream::StreamExt;\n");
-                buf.push_str("\n");
                 buf.push_str("\tuse prost::Message;\n");
-                buf.push_str("\n");
                 buf.push_str("\tuse rums::ServerHandler;\n");
-                buf.push_str("\n");
                 buf.push_str("\tuse rums::get_route;\n");
                 buf.push_str("\tuse rums::add_route;\n");
                 buf.push_str("\tuse rums::RouteHandler;\n");
-                buf.push_str("\tuse rums::Response;\n");
-                buf.push_str("\n");
-                buf.push_str("\tuse std::marker::Copy;\n");
+                buf.push_str("\tuse rums::ResponsesMap;\n");
+                buf.push_str("\tuse std::io;\n");
+                buf.push_str("\tuse rums::SendOptions;\n");
                 buf.push_str("\n");
 
                 buf.push_str(format!("\tpub trait {}Client<NIDT> {{\n", service.name).as_str());
                 {
 
                     for method in service.methods.iter() {
-                        buf.push_str(format!("\t\tfn {}<'a>(&'a self, msg: &super::{}) -> impl Stream<Item = Response<'a, super::{}, NIDT>> where NIDT: 'a;\n", method.name, method.input_type, method.output_type).as_str());
+                        buf.push_str(format!("\t\tfn {}<'a>(&'a self, msg: &super::{}, options: SendOptions) -> io::Result<ResponsesMap<'a, super::{}, NIDT>>;\n", method.name, method.input_type, method.output_type).as_str());
                     }
 
                 }
                 buf.push_str("\t}\n");
                 buf.push_str("\n");
 
-                buf.push_str(format!("\timpl<NIDT: Copy> {}Client<NIDT> for Configuration<NIDT> {{\n", service.name).as_str());
+                buf.push_str(format!("\timpl<NIDT: Clone> {}Client<NIDT> for Configuration<NIDT> {{\n", service.name).as_str());
                 {
 
                     for method in service.methods.iter() {
                         buf.push_str("\n");
                         buf.push_str(format!("\t\t// method: {}\n", method.proto_name).as_str());
-                        buf.push_str(format!("\t\tfn {}<'a>(&'a self, msg: &super::{}) -> impl Stream<Item = Response<'a, super::{}, NIDT>> where NIDT: 'a {{\n", method.name, method.input_type, method.output_type).as_str());
+                        buf.push_str(format!("\t\tfn {}<'a>(&'a self, msg: &super::{}, options: SendOptions) -> io::Result<ResponsesMap<'a, super::{}, NIDT>> {{\n", method.name, method.input_type, method.output_type).as_str());
                         {
                             buf.push_str("\t\t\tlet mut buf = vec![];\n");
-                            buf.push_str("\t\t\tmsg.encode(&mut buf).unwrap();\n");
+                            buf.push_str("\t\t\tmsg.encode(&mut buf)?;\n");
                             buf.push_str(format!("\t\t\tlet buf = add_route(add_route(add_route(buf, \"{}\"), \"{}\"), \"{}\");\n", method.proto_name, service.proto_name, service.package).as_str());
                             buf.push_str("\n");
-                            buf.push_str("\t\t\tlet responses = self.send(buf);\n");
+                            buf.push_str("\t\t\tlet responses = self.send(buf.into_boxed_slice(), options)?;\n");
                             buf.push_str("\n");
-                            buf.push_str("\t\t\tresponses.map(|res| {\n");
-                            buf.push_str("\t\t\t\tResponse {\n");
-                            buf.push_str("\t\t\t\t\tnode: res.node,\n");
-                            buf.push_str("\t\t\t\t\tresponse: res.response.map(|buf| {\n");
-                            buf.push_str(format!("\t\t\t\t\t\tsuper::{}::decode(&buf as &[u8]).unwrap()\n", method.output_type).as_str());
-                            buf.push_str("\t\t\t\t\t})\n");
-                            buf.push_str("\t\t\t\t}\n");
-                            buf.push_str("\t\t})\n");
+                            buf.push_str("\t\t\tOk(ResponsesMap::new(responses))\n");
                         }
                         buf.push_str("\t\t}\n");
                     }

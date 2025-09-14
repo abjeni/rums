@@ -2,12 +2,15 @@
 use std::string::String;
 
 use rums::Configuration;
+use rums::SendOptions;
 use rums::add_route;
 
-use futures::stream::StreamExt;
+use std::io::Result;
+
+use std::io::ErrorKind;
 
 #[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
+async fn main() -> Result<()> {
 
     let mut addrs = vec![];
 
@@ -22,17 +25,23 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let data = add_route(data, "world");
     let data = add_route(data, "hello");
 
-    let mut responses = cfg.send(data);
+    let responses = cfg.send(data, SendOptions::default())?;
 
-    while let Some(res) = responses.next().await {
+
+    for res in responses {
         match res.response {
             Ok(msg) => {
                 match String::from_utf8(msg) {
-                    Ok(text) => println!("got response from node {}: {}", res.node.id, text),
-                    Err(e) => println!("node {}: response not utf8: err = {:?}", res.node.id, e)
+                    Ok(text) => println!("got response from node {}: {}", res.node.unwrap().id, text),
+                    Err(e) => println!("node {}: response not utf8: err = {:?}", res.node.unwrap().id, e)
                 }
             },
-            Err(e) => println!("node {}: response error: err = {:?}", res.node.id, e)
+            Err(e) => {
+                println!("response error: err = {:?}", e);
+                if e.kind() == ErrorKind::NotFound {
+                    break;
+                }
+            }
         }
     }
 

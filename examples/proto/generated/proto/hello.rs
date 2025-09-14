@@ -3,87 +3,58 @@
 pub struct HelloMessage {
     #[prost(string, tag = "1")]
     pub message: ::prost::alloc::string::String,
-    #[prost(uint32, tag = "2")]
-    pub wait_time: u32,
 }
 pub mod hello {
     use rums::Configuration;
-    use futures::stream::Stream;
     use std::error::Error;
-    use futures::stream::StreamExt;
     use prost::Message;
     use rums::ServerHandler;
     use rums::get_route;
     use rums::add_route;
     use rums::RouteHandler;
-    use rums::Response;
-    use std::marker::Copy;
+    use rums::ResponsesMap;
+    use std::io;
+    use rums::SendOptions;
     pub trait HelloClient<NIDT> {
         fn hello_world<'a>(
             &'a self,
             msg: &super::HelloMessage,
-        ) -> impl Stream<Item = Response<'a, super::HelloMessage, NIDT>>
-        where
-            NIDT: 'a;
+            options: SendOptions,
+        ) -> io::Result<ResponsesMap<'a, super::HelloMessage, NIDT>>;
         fn goodbye_world<'a>(
             &'a self,
             msg: &super::HelloMessage,
-        ) -> impl Stream<Item = Response<'a, super::HelloMessage, NIDT>>
-        where
-            NIDT: 'a;
+            options: SendOptions,
+        ) -> io::Result<ResponsesMap<'a, super::HelloMessage, NIDT>>;
     }
-    impl<NIDT: Copy> HelloClient<NIDT> for Configuration<NIDT> {
+    impl<NIDT: Clone> HelloClient<NIDT> for Configuration<NIDT> {
         fn hello_world<'a>(
             &'a self,
             msg: &super::HelloMessage,
-        ) -> impl Stream<Item = Response<'a, super::HelloMessage, NIDT>>
-        where
-            NIDT: 'a,
-        {
+            options: SendOptions,
+        ) -> io::Result<ResponsesMap<'a, super::HelloMessage, NIDT>> {
             let mut buf = vec![];
-            msg.encode(&mut buf).unwrap();
+            msg.encode(&mut buf)?;
             let buf = add_route(
                 add_route(add_route(buf, "HelloWorld"), "Hello"),
                 "hello",
             );
-            let responses = self.send(buf);
-            responses
-                .map(|res| {
-                    Response {
-                        node: res.node,
-                        response: res
-                            .response
-                            .map(|buf| {
-                                super::HelloMessage::decode(&buf as &[u8]).unwrap()
-                            }),
-                    }
-                })
+            let responses = self.send(buf.into_boxed_slice(), options)?;
+            Ok(ResponsesMap::new(responses))
         }
         fn goodbye_world<'a>(
             &'a self,
             msg: &super::HelloMessage,
-        ) -> impl Stream<Item = Response<'a, super::HelloMessage, NIDT>>
-        where
-            NIDT: 'a,
-        {
+            options: SendOptions,
+        ) -> io::Result<ResponsesMap<'a, super::HelloMessage, NIDT>> {
             let mut buf = vec![];
-            msg.encode(&mut buf).unwrap();
+            msg.encode(&mut buf)?;
             let buf = add_route(
                 add_route(add_route(buf, "GoodbyeWorld"), "Hello"),
                 "hello",
             );
-            let responses = self.send(buf);
-            responses
-                .map(|res| {
-                    Response {
-                        node: res.node,
-                        response: res
-                            .response
-                            .map(|buf| {
-                                super::HelloMessage::decode(&buf as &[u8]).unwrap()
-                            }),
-                    }
-                })
+            let responses = self.send(buf.into_boxed_slice(), options)?;
+            Ok(ResponsesMap::new(responses))
         }
     }
     pub trait HelloServer {
